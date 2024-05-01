@@ -1,10 +1,9 @@
 import dash
-from dash import dcc
-from dash import html
-from dash.dependencies import Input, Output
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objs as go
-import pandas as pd
+from dash import dcc, html
+from dash.dependencies import Input, Output
 
 # Carregando os dados dos cupons fiscais
 df_full = pd.read_excel('Estudos\df_full.xlsx')
@@ -67,17 +66,19 @@ def update_graph(clickData):
         # Se nenhum dado foi clicado, não exiba nada
         return go.Figure()
     else:
-        print(clickData)
+        
         # Obtenha o produto selecionado a partir dos dados clicados
         produto_selecionado = index_to_cod_ean_desc[clickData['points'][0]['curveNumber']]
         df_filtrado = df_full[df_full['cod_ean_desc'] == produto_selecionado]
-        df_filtrado = df_filtrado[['data_nf', 'descricao', 'valor_un_comercializacao']]
-        print(df_filtrado)
+        df_filtrado = df_filtrado[['data_nf', 'descricao', 'valor_un_comercializacao']].reset_index(drop=True)
+        # print(df_filtrado)
+        
+        titulo = f"Variação de Preços ao Longo do Tempo do produto: {df_filtrado['descricao'][0]}"
         
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=df_filtrado['data_nf'], y=df_filtrado['valor_un_comercializacao'], mode='lines+markers', name='Preço'))
-        fig.update_layout(title='Variação de Preços ao Longo do Tempo', xaxis_title='Data', yaxis_title='Preço',
-                          yaxis=dict(tickprefix="R$ ", showgrid=True))
+        fig.update_layout(title=titulo, xaxis_title='Data', yaxis_title='Preço',
+                          yaxis=dict(tickprefix="R$ ", tickformat=".2f", showgrid=True))
         return fig
 
 if __name__ == '__main__':
