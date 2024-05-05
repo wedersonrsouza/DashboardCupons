@@ -4,3 +4,5 @@ dash-html-components
 plotly
 pandas
 openpyxl
+selenium
+openpyxl
