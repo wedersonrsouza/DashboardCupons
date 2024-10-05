@@ -38,7 +38,7 @@ def normalize_product_name(product_name, reference_list):
 
 reference_products = [
     'BANANA NANICA', 'MAMAO PAPAYA', 'ALFACE', 'TOMATE', 'CEBOLA', 
-    'REPOLHO', 'REPOLHO ROXO', 'BETERRABA', 'BATATA MONALISA', 'PEPINO'
+    'REPOLHO', 'REPOLHO ROXO', 'BETERRABA', 'BATATA MONALISA', 'PEPINO', 'PAO FRANCES', 'PAO HOT DOG', 'PIMENTAO', 'MELANCIA'
 ]
 
 # Lista para armazenar os dataframes individuais
@@ -50,6 +50,8 @@ for file_name in os.listdir(directory_path):
     # Verifica se o arquivo é um XLSX
     if file_name.endswith('.xlsx'):
         file_path = os.path.join(directory_path, file_name)
+        
+        print(file_path)
         
         # Carrega o arquivo XLSX em um dataframe com conversão de vírgula para ponto
         df = pd.read_excel(file_path)
@@ -84,6 +86,9 @@ df_full = df_full[df_full.groupby('cod_ean_desc')['cod_ean_desc'].transform('cou
 # Calcular a variacao de precos, agrupando por cod_ean_desc
 df_full['variacao_preco'] = df_full.groupby('cod_ean_desc')['valor_unitario'].pct_change()
 
+
+
+df_full.to_excel('df_full.xlsx')
 # Criar um novo DataFrame que contém a última variação de preço para cada produto
 df_variacao_preco = df_full.drop_duplicates('cod_ean_desc', keep='last')[['cod_ean_desc', 'descricao_normalizado', 'variacao_preco']]
 
@@ -93,7 +98,7 @@ app = dash.Dash(__name__)
 
 app.layout = html.Div([
     dcc.Graph(id='variacao-preco-graph'),  # Gráfico para variação de preço
-    dcc.Graph(id='preco-graph')  # Gráfico para preço
+    dcc.Graph(id='preco-graph')  # Gráfico para preço ao clicar em produto
 ])
 
 index_to_cod_ean_desc = {}  # Dicionário para mapear índices para cod_ean_desc
@@ -106,6 +111,7 @@ def update_variacao_preco_graph(clickData):
     data = []
     global index_to_cod_ean_desc
     index_to_cod_ean_desc = {}
+    
     for i, produto in enumerate(df_variacao_preco['cod_ean_desc'].unique()):
         df_filtrado = df_variacao_preco[df_variacao_preco['cod_ean_desc'] == produto]
         data.append(go.Bar(
@@ -116,9 +122,19 @@ def update_variacao_preco_graph(clickData):
             textposition='auto'  # Posiciona o texto dentro das barras
         ))
         index_to_cod_ean_desc[i] = produto  # Adicione o mapeamento ao dicionário
+    
+    # Criação do gráfico de variação de preço
     fig = go.Figure(data=data)
-    fig.update_layout(title='Variação de Preço de Todos os Produtos ao Longo do Tempo', xaxis_title='Produto', yaxis_title='Variação de Preço',
-                      yaxis=dict(tickformat=".2%", showgrid=True), height=800  )  # Formato de porcentagem para variação de preço
+    
+    # Definindo altura personalizada
+    fig.update_layout(
+        title='Variação de Preço de Todos os Produtos ao Longo do Tempo', 
+        xaxis_title='Produto', 
+        yaxis_title='Variação de Preço',
+        yaxis=dict(tickformat=".2%", showgrid=True),  # Formato de porcentagem para variação de preço
+        height=800  # Defina a altura do gráfico
+    )
+    
     return fig
 
 @app.callback(
@@ -130,19 +146,38 @@ def update_graph(clickData):
         # Se nenhum dado foi clicado, não exiba nada
         return go.Figure()
     else:
-        
         # Obtenha o produto selecionado a partir dos dados clicados
         produto_selecionado = index_to_cod_ean_desc[clickData['points'][0]['curveNumber']]
+        
+        # Filtra os dados com base no produto selecionado
         df_filtrado = df_full[df_full['cod_ean_desc'] == produto_selecionado]
-        df_filtrado = df_filtrado[['data_nf', 'descricao_normalizado', 'valor_unitario']].reset_index(drop=True)
-        # print(df_filtrado)
         
-        titulo = f"Variação de Preços ao Longo do Tempo do produto: {df_filtrado['descricao_normalizado'][0]}"
+        # Obtém o nome do produto a partir da coluna 'descricao_normalizado'
+        nome_produto = df_filtrado['descricao_normalizado'].iloc[0]
         
+        # Agora agrupamos os dados por cnpj_empresa e nome_empresa e plotamos uma linha para cada empresa
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df_filtrado['data_nf'], y=df_filtrado['valor_unitario'], mode='lines+markers', name='Preço'))
-        fig.update_layout(title=titulo, xaxis_title='Data', yaxis_title='Preço',
-                          yaxis=dict(tickprefix="R$ ", tickformat=".2f", showgrid=True))
+
+        for cnpj, nome_empresa in df_filtrado.groupby(['cnpj_empresa', 'nome_empresa']).groups.keys():
+            df_empresa = df_filtrado[(df_filtrado['cnpj_empresa'] == cnpj) & (df_filtrado['nome_empresa'] == nome_empresa)]
+            fig.add_trace(go.Scatter(
+                x=df_empresa['data_nf'], 
+                y=df_empresa['valor_unitario'], 
+                mode='lines+markers', 
+                name=f'{nome_empresa} ({cnpj})',
+                showlegend=True  # Força a legenda a ser exibida
+            ))
+
+        titulo = f"Variação de Preços ao Longo do Tempo por Empresa para o produto: {nome_produto}"
+        
+        # Ajustes do layout
+        fig.update_layout(
+            title=titulo, 
+            xaxis_title='Data', 
+            yaxis_title='Preço Unitário',
+            yaxis=dict(tickprefix="R$ ", tickformat=".2f", showgrid=True),
+            height=600  # Defina a altura do gráfico
+        )
         return fig
 
 if __name__ == '__main__':
